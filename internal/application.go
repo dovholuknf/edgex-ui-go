@@ -19,6 +19,9 @@ package internal
 
 import (
 	"fmt"
+	"github.com/openziti/sdk-golang/ziti"
+	"golang.org/x/net/context"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -40,17 +43,65 @@ const (
 
 var (
 	//clientName:clientHost
-	clientsMapping map[string]string
+	clientsMapping map[string]Client
 )
 
 type Application struct {
 	config *config.ConfigurationStruct
 }
 
+type Client struct {
+	addr      string
+	transport http.RoundTripper
+}
+
 func initClientsMapping(config *config.ConfigurationStruct) {
-	clientsMapping = make(map[string]string, 10)
+	clientsMapping = make(map[string]Client, 10)
+	zitiTransports := make(map[string]http.RoundTripper, 10)
 	for clientName, clientInfo := range config.Clients {
-		clientsMapping[fmt.Sprintf("/%s", clientName)] = fmt.Sprintf("%s://%s:%d", clientInfo.Protocol, clientInfo.Host, clientInfo.Port)
+		//clientsMapping[fmt.Sprintf("/%s", clientName)] = fmt.Sprintf("%s://%s:%d", clientInfo.Protocol, clientInfo.Host, clientInfo.Port)
+
+		addr := fmt.Sprintf("%s://%s:%d", clientInfo.Protocol, clientInfo.Host, clientInfo.Port)
+		client := Client{
+			addr:      addr,
+			transport: nil,
+		}
+		if len(clientInfo.SecurityOptions) > 0 {
+			fmt.Printf("client %s is using zero trust? noice\n", clientName)
+			if idFile, ok := clientInfo.SecurityOptions["IdentityFile"]; ok {
+				var zitiRoundTripper http.RoundTripper
+
+				//openZitiServiceName := clientInfo.SecurityOptions["OpenZitiServiceName"]
+				if zitiRoundTripper, ok = zitiTransports[idFile]; ok {
+					//reuse the existing context
+					if zitiRoundTripper == nil {
+						panic("how is the transport nil")
+					}
+					client.transport = zitiRoundTripper
+					//client.addr = "http://" + openZitiServiceName
+				} else {
+					ctx, err := ziti.LoadContext(idFile)
+					if err != nil {
+						panic(err)
+					}
+					ziti.DefaultCollection.Add(ctx)
+
+					zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
+					zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+						dialer := ziti.NewDialerWithFallback(ctx, nil)
+						return dialer.Dial(network, addr)
+					}
+					zitiTransports[idFile] = zitiTransport
+					client.transport = zitiTransport
+					//client.addr = "http://" + openZitiServiceName
+				}
+			} else {
+				fmt.Printf("something went wrong with ziti on %s\n", clientName)
+			}
+		} else {
+			fmt.Printf("client %s is NOT using zero trust? booooo\n", clientName)
+		}
+		clientsMapping[fmt.Sprintf("/%s", clientName)] = client
 	}
 }
 
@@ -88,29 +139,21 @@ func (app *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for prefix := range clientsMapping {
 		if strings.HasPrefix(path, prefix) {
-			if common.IsSecurityEnabled() {
-				app.secure(w, r)
-				return
-			}
 			originalPath := strings.TrimPrefix(path, prefix)
 			targetAddr := clientsMapping[prefix]
-			insecure(w, r, originalPath, targetAddr)
+			if common.IsSecurityEnabled() {
+				app.secure(w, r, originalPath, targetAddr)
+			} else {
+				insecure(w, r, originalPath, targetAddr)
+			}
+			return
 		}
 	}
 }
 
-func (app *Application) secure(w http.ResponseWriter, r *http.Request) {
-	targetHost := fmt.Sprintf("%s:%d", app.config.APIGateway.Server, app.config.APIGateway.ApplicationPort)
-	director := func(req *http.Request) {
-		req.URL.Scheme = HttpProtocol
-		req.URL.Host = targetHost
-	}
-	(&httputil.ReverseProxy{Director: director}).ServeHTTP(w, r)
-}
-
-func insecure(w http.ResponseWriter, r *http.Request, originalPath string, targetAddr string) {
+func (app *Application) secure(w http.ResponseWriter, r *http.Request, originalPath string, client Client) {
 	defer r.Body.Close()
-	origin, _ := url.Parse(targetAddr)
+	origin, _ := url.Parse(client.addr)
 	director := func(req *http.Request) {
 		req.Header.Add(ForwardedHostReqHeader, req.Host)
 		req.Header.Add(OriginHostReqHeader, origin.Host)
@@ -118,5 +161,20 @@ func insecure(w http.ResponseWriter, r *http.Request, originalPath string, targe
 		req.URL.Host = origin.Host
 		req.URL.Path = originalPath
 	}
-	(&httputil.ReverseProxy{Director: director}).ServeHTTP(w, r)
+	rp := &httputil.ReverseProxy{Director: director, Transport: client.transport}
+	rp.ServeHTTP(w, r)
+}
+
+func insecure(w http.ResponseWriter, r *http.Request, originalPath string, client Client) {
+	defer r.Body.Close()
+	origin, _ := url.Parse(client.addr)
+	director := func(req *http.Request) {
+		req.Header.Add(ForwardedHostReqHeader, req.Host)
+		req.Header.Add(OriginHostReqHeader, origin.Host)
+		req.URL.Scheme = HttpProtocol
+		req.URL.Host = origin.Host
+		req.URL.Path = originalPath
+	}
+	rp := &httputil.ReverseProxy{Director: director, Transport: client.transport}
+	rp.ServeHTTP(w, r)
 }
