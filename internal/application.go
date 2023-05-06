@@ -19,6 +19,7 @@ package internal
 
 import (
 	"fmt"
+	"github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/handlers"
 	"github.com/openziti/sdk-golang/ziti"
 	"golang.org/x/net/context"
 	"net"
@@ -66,40 +67,44 @@ func initClientsMapping(config *config.ConfigurationStruct) {
 			addr:      addr,
 			transport: nil,
 		}
-		if len(clientInfo.SecurityOptions) > 0 {
-			fmt.Printf("client %s is using zero trust? "+
-				"noice\n", clientName)
-			if idFile, ok := clientInfo.SecurityOptions["IdentityFile"]; ok {
-				var zitiRoundTripper http.RoundTripper
 
-				//openZitiServiceName := clientInfo.SecurityOptions["OpenZitiServiceName"]
-				if zitiRoundTripper, ok = zitiTransports[idFile]; ok {
-					//reuse the existing context
-					if zitiRoundTripper == nil {
-						panic("how is the transport nil")
-					}
-					client.transport = zitiRoundTripper
-					//client.addr = "http://" + openZitiServiceName
-				} else {
-					ctx, err := ziti.LoadContext(idFile)
-					if err != nil {
-						panic(err)
-					}
-					ziti.DefaultCollection.Add(ctx)
+		switch config.Service.SecurityOptions["ListenMode"] {
+		case "zerotrust":
+			fmt.Printf("client %s is using zero trust? noice\n", clientName)
 
-					zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
-					zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-						dialer := ziti.NewDialerWithFallback(ctx, nil)
-						return dialer.Dial(network, addr)
-					}
-					zitiTransports[idFile] = zitiTransport
-					client.transport = zitiTransport
-					//client.addr = "http://" + openZitiServiceName
+			//var zitiRoundTripper http.RoundTripper
+
+			//openZitiServiceName := clientInfo.SecurityOptions["OpenZitiServiceName"]
+			if zitiRoundTripper, ok := zitiTransports[clientName]; ok {
+				//reuse the existing context
+				if zitiRoundTripper == nil {
+					panic("how is the transport nil")
 				}
+				client.transport = zitiRoundTripper
+				//client.addr = "http://" + openZitiServiceName
 			} else {
-				fmt.Printf("something went wrong with ziti on %s\n", clientName)
+
+				openZitiRootUrl := "https://" + config.Service.SecurityOptions["OpenZitiController"]
+				jwt := ""
+				caPool, caErr := ziti.GetControllerWellKnownCaPool("https://" + config.Service.SecurityOptions["OpenZitiController"])
+				if caErr != nil {
+					panic(caErr)
+				}
+				ctx := handlers.AuthToOpenZiti(openZitiRootUrl, jwt, caPool)
+
+				ziti.DefaultCollection.Add(ctx)
+
+				zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
+				zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+					dialer := ziti.NewDialerWithFallback(ctx, nil)
+					return dialer.Dial(network, addr)
+				}
+				zitiTransports[clientName] = zitiTransport
+				client.transport = zitiTransport
 			}
-		} else {
+
+		case "http":
+		default:
 			fmt.Printf("client %s is NOT using zero trust? booooo\n", clientName)
 		}
 		clientsMapping[fmt.Sprintf("/%s", clientName)] = client
