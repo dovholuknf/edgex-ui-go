@@ -67,7 +67,8 @@ func initClientsMapping(config *config.ConfigurationStruct) {
 			transport: nil,
 		}
 		if len(clientInfo.SecurityOptions) > 0 {
-			fmt.Printf("client %s is using zero trust? noice\n", clientName)
+			fmt.Printf("client %s is using zero trust? "+
+				"noice\n", clientName)
 			if idFile, ok := clientInfo.SecurityOptions["IdentityFile"]; ok {
 				var zitiRoundTripper http.RoundTripper
 
