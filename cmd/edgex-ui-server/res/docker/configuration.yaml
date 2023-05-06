@@ -16,7 +16,7 @@ Clients:
     core-metadata:
         Protocol: http
         Host: edgex-core-metadata
-        Port: 59881
+        Port: 59108
     core-command:
         Protocol: http
         Host: edgex-core-command
