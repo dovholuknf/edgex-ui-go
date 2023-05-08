@@ -86,7 +86,7 @@ func initClientsMapping(config *config.ConfigurationStruct) {
 
 				openZitiRootUrl := "https://" + config.Service.SecurityOptions["OpenZitiController"]
 				jwt := ""
-				caPool, caErr := ziti.GetControllerWellKnownCaPool("https://" + config.Service.SecurityOptions["OpenZitiController"])
+				caPool, caErr := ziti.GetControllerWellKnownCaPool(openZitiRootUrl)
 				if caErr != nil {
 					panic(caErr)
 				}
