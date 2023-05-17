@@ -9,7 +9,7 @@ Service:
     MaxRequestSize: 0
     RequestTimeout: 5s
     SecurityOptions:
-        _ListenMode: "zerotrust"
+        ListenMode: "zerotrust"
         OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
         OpenZitiServiceName: "edgex.ui"
         OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
