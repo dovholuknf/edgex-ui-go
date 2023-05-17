@@ -9,8 +9,10 @@ Service:
     MaxRequestSize: 0
     RequestTimeout: 5s
     SecurityOptions:
-        OpenZitiController: "openziti.controller:8441"
-        OpenZitiServiceName: "svc.ui-server"
+        _ListenMode: "zerotrust"
+        OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
+        OpenZitiServiceName: "edgex.ui"
+        OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
     CORSConfiguration:
         EnableCORS: true
         CORSAllowCredentials: false
@@ -25,43 +27,55 @@ Clients:
         Host: "core-data.edgex.ziti"
         Port: 80
         SecurityOptions:
-            OpenZitiController: "openziti.controller:8441"
+            Mode: "zerotrust"
+            OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
             OpenZitiServiceName: "edgex.core-data"
+            OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
     core-metadata:
         Protocol: http
         Host: "core-metadata.edgex.ziti"
         Port: 80
         SecurityOptions:
-            OpenZitiController: "openziti.controller:8441"
+            Mode: "zerotrust"
+            OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
             OpenZitiServiceName: "edgex.core-metadata"
+            OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
     core-command:
         Protocol: http
         Host: "core-command.edgex.ziti"
         Port: 80
         SecurityOptions:
-            OpenZitiController: "openziti.controller:8441"
+            Mode: "zerotrust"
+            OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
             OpenZitiServiceName: "edgex.core-command"
+            OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
     support-notifications:
         Protocol: http
         Host: "support-notifications.edgex.ziti"
         Port: 80
         SecurityOptions:
-            OpenZitiController: "openziti.controller:8441"
+            Mode: "zerotrust"
+            OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
             OpenZitiServiceName: "edgex.support-notifications"
+            OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
     support-scheduler:
         Protocol: http
         Host: "support-scheduler.edgex.ziti"
         Port: 80
         SecurityOptions:
-            OpenZitiController: "openziti.controller:8441"
+            Mode: "zerotrust"
+            OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
             OpenZitiServiceName: "edgex.support-scheduler"
+            OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
     rules-engine:
         Protocol: http
         Host: "rules-engine.edgex.ziti"
         Port: 80
         SecurityOptions:
-            OpenZitiController: "openziti.controller:8441"
+            Mode: "zerotrust"
+            OpenZitiController: "ec2-3-134-108-218.us-east-2.compute.amazonaws.com:8441"
             OpenZitiServiceName: "edgex.rules-engine"
+            OpenZitiIdentityFile: "/mnt/v/temp/curlz.json"
 Registry:
     Host: localhost
     Port: 8500

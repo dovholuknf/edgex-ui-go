@@ -19,7 +19,6 @@ package internal
 
 import (
 	"fmt"
-	"github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/handlers"
 	"github.com/openziti/sdk-golang/ziti"
 	"golang.org/x/net/context"
 	"net"
@@ -68,14 +67,16 @@ func initClientsMapping(config *config.ConfigurationStruct) {
 			transport: nil,
 		}
 
-		switch config.Service.SecurityOptions["ListenMode"] {
+		switch clientInfo.SecurityOptions["Mode"] {
 		case "zerotrust":
 			fmt.Printf("client %s is using zero trust? noice\n", clientName)
 
 			//var zitiRoundTripper http.RoundTripper
 
 			//openZitiServiceName := clientInfo.SecurityOptions["OpenZitiServiceName"]
-			if zitiRoundTripper, ok := zitiTransports[clientName]; ok {
+			ozIdFile := clientInfo.SecurityOptions["OpenZitiIdentityFile"]
+
+			if zitiRoundTripper, ok := zitiTransports[ozIdFile]; ok {
 				//reuse the existing context
 				if zitiRoundTripper == nil {
 					panic("how is the transport nil")
@@ -84,22 +85,36 @@ func initClientsMapping(config *config.ConfigurationStruct) {
 				//client.addr = "http://" + openZitiServiceName
 			} else {
 
-				openZitiRootUrl := "https://" + config.Service.SecurityOptions["OpenZitiController"]
-				jwt := ""
-				caPool, caErr := ziti.GetControllerWellKnownCaPool(openZitiRootUrl)
-				if caErr != nil {
-					panic(caErr)
-				}
-				ctx := handlers.AuthToOpenZiti(openZitiRootUrl, jwt, caPool)
+				var zitiCtx ziti.Context
+				if strings.TrimSpace(ozIdFile) == "" {
+					/*
+						openZitiRootUrl := "https://" + config.Service.SecurityOptions["OpenZitiController"]
+						jwtSecretProvider := secret.NewJWTSecretProvider(container.SecretProviderExtFrom(dic.Get))
+						config.di
+						jwt := ""
 
-				ziti.DefaultCollection.Add(ctx)
+						caPool, caErr := ziti.GetControllerWellKnownCaPool(openZitiRootUrl)
+						if caErr != nil {
+							panic(caErr)
+						}
+						ctx := handlers.AuthToOpenZiti(openZitiRootUrl, jwt, caPool)
+					*/
+				} else {
+					var ctxErr error
+					zitiCtx, ctxErr = ziti.LoadContext(ozIdFile)
+					if ctxErr != nil {
+						panic(ctxErr)
+					}
+				}
+
+				ziti.DefaultCollection.Add(zitiCtx)
 
 				zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
 				zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 					dialer := ziti.NewDialerWithFallback(ctx, nil)
 					return dialer.Dial(network, addr)
 				}
-				zitiTransports[clientName] = zitiTransport
+				zitiTransports[ozIdFile] = zitiTransport
 				client.transport = zitiTransport
 			}
 
