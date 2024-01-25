@@ -9,7 +9,7 @@ Service:
     MaxRequestSize: 0
     RequestTimeout: 5s
     SecurityOptions:
-        ListenMode: "zerotrust"
+        Mode: "zerotrust"
         OpenZitiController: "openziti:1280"
         OpenZitiServiceName: "edgex.ui"
         OpenZitiIdentityFile_: "/mnt/v/temp/curlz.json"

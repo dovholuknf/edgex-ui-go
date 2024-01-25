@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	bc "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
-	"github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/handlers"
 	"github.com/edgexfoundry/go-mod-bootstrap/v3/di"
 	"github.com/openziti/sdk-golang/ziti"
 	"net"
@@ -102,11 +101,13 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 				client.transport = zitiRoundTripper
 			} else {
 				ozUrl := clientInfo.SecurityOptions["OpenZitiController"]
-				_ = handlers.AuthToOpenZiti(ozUrl, ozToken)
+				ctx := bc.AuthToOpenZiti(ozUrl, ozToken)
+				zitiContexts := ziti.NewSdkCollection()
+				zitiContexts.Add(ctx)
 
 				zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
 				zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-					dialer := ziti.NewDialerWithFallback(ctx, nil)
+					dialer := zitiContexts.NewDialer()
 					return dialer.Dial(network, addr)
 				}
 				zitiTransports[ozToken] = zitiTransport
