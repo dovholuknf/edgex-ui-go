@@ -18,10 +18,16 @@
 package internal
 
 import (
+	"context"
 	"fmt"
+	bc "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
+	"github.com/edgexfoundry/go-mod-bootstrap/v3/di"
+	"github.com/openziti/sdk-golang/ziti"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/edgexfoundry/edgex-ui-go/internal/common"
@@ -38,19 +44,81 @@ const (
 	staticResourcePath = "static/web"
 )
 
+type Client struct {
+	addr      string
+	transport http.RoundTripper
+}
+
 var (
 	//clientName:clientHost
-	clientsMapping map[string]string
+	clientsMapping map[string]Client
 )
 
 type Application struct {
 	config *config.ConfigurationStruct
 }
 
-func initClientsMapping(config *config.ConfigurationStruct) {
-	clientsMapping = make(map[string]string, 10)
+func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
+	lc := bc.LoggingClientFrom(dic.Get)
+	clientsMapping = make(map[string]Client, 10)
+	zitiTransports := make(map[string]http.RoundTripper, 10)
+
 	for clientName, clientInfo := range config.Clients {
-		clientsMapping[fmt.Sprintf("/%s", clientName)] = fmt.Sprintf("%s://%s:%d", clientInfo.Protocol, clientInfo.Host, clientInfo.Port)
+		addr := fmt.Sprintf("%s://%s:%d", clientInfo.Protocol, clientInfo.Host, clientInfo.Port)
+		client := Client{
+			addr:      addr,
+			transport: nil,
+		}
+
+		switch clientInfo.SecurityOptions["Mode"] {
+		case "zerotrust":
+			fmt.Printf("client %s is using zero trust? noice\n", clientName)
+			ozToken := clientInfo.SecurityOptions["OpenZitiAuthToken"]
+
+			if ozToken == "" {
+				ozTokenFile := clientInfo.SecurityOptions["OpenZitiAuthTokenFile"]
+				if _, err := os.Stat(ozTokenFile); os.IsNotExist(err) {
+					panic("cannot use zero trust configuration. no credentials supplied")
+				} else {
+					ozTokenContents, err := os.ReadFile(ozTokenFile)
+					ozToken = strings.TrimSpace(string(ozTokenContents))
+					if err != nil {
+						lc.Errorf("Could not read OpenZitiAuthTokenFile at %s. %v", ozTokenFile, err)
+						panic(err)
+					}
+				}
+			}
+
+			if ozToken == "" {
+				panic("cannot use zero trust configuration. no credentials supplied")
+			}
+
+			if zitiRoundTripper, ok := zitiTransports[ozToken]; ok {
+				//reuse the existing context
+				if zitiRoundTripper == nil {
+					panic("how is the transport nil")
+				}
+				client.transport = zitiRoundTripper
+			} else {
+				ozUrl := clientInfo.SecurityOptions["OpenZitiController"]
+				ctx := bc.AuthToOpenZiti(ozUrl, ozToken)
+				zitiContexts := ziti.NewSdkCollection()
+				zitiContexts.Add(ctx)
+
+				zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
+				zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+					dialer := zitiContexts.NewDialer()
+					return dialer.Dial(network, addr)
+				}
+				zitiTransports[ozToken] = zitiTransport
+				client.transport = zitiTransport
+			}
+
+		case "http":
+		default:
+			fmt.Printf("client %s is NOT using zero trust? booooo\n", clientName)
+		}
+		clientsMapping[fmt.Sprintf("/%s", clientName)] = client
 	}
 }
 
@@ -88,29 +156,21 @@ func (app *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for prefix := range clientsMapping {
 		if strings.HasPrefix(path, prefix) {
-			if common.IsSecurityEnabled() {
-				app.secure(w, r)
-				return
-			}
 			originalPath := strings.TrimPrefix(path, prefix)
 			targetAddr := clientsMapping[prefix]
-			insecure(w, r, originalPath, targetAddr)
+			if common.IsSecurityEnabled() {
+				app.secure(w, r, originalPath, targetAddr)
+			} else {
+				insecure(w, r, originalPath, targetAddr)
+			}
+			return
 		}
 	}
 }
 
-func (app *Application) secure(w http.ResponseWriter, r *http.Request) {
-	targetHost := fmt.Sprintf("%s:%d", app.config.APIGateway.Server, app.config.APIGateway.ApplicationPort)
-	director := func(req *http.Request) {
-		req.URL.Scheme = HttpProtocol
-		req.URL.Host = targetHost
-	}
-	(&httputil.ReverseProxy{Director: director}).ServeHTTP(w, r)
-}
-
-func insecure(w http.ResponseWriter, r *http.Request, originalPath string, targetAddr string) {
+func (app *Application) secure(w http.ResponseWriter, r *http.Request, originalPath string, client Client) {
 	defer r.Body.Close()
-	origin, _ := url.Parse(targetAddr)
+	origin, _ := url.Parse(client.addr)
 	director := func(req *http.Request) {
 		req.Header.Add(ForwardedHostReqHeader, req.Host)
 		req.Header.Add(OriginHostReqHeader, origin.Host)
@@ -118,5 +178,20 @@ func insecure(w http.ResponseWriter, r *http.Request, originalPath string, targe
 		req.URL.Host = origin.Host
 		req.URL.Path = originalPath
 	}
-	(&httputil.ReverseProxy{Director: director}).ServeHTTP(w, r)
+	rp := &httputil.ReverseProxy{Director: director, Transport: client.transport}
+	rp.ServeHTTP(w, r)
+}
+
+func insecure(w http.ResponseWriter, r *http.Request, originalPath string, client Client) {
+	defer r.Body.Close()
+	origin, _ := url.Parse(client.addr)
+	director := func(req *http.Request) {
+		req.Header.Add(ForwardedHostReqHeader, req.Host)
+		req.Header.Add(OriginHostReqHeader, origin.Host)
+		req.URL.Scheme = HttpProtocol
+		req.URL.Host = origin.Host
+		req.URL.Path = originalPath
+	}
+	rp := &httputil.ReverseProxy{Director: director, Transport: client.transport}
+	rp.ServeHTTP(w, r)
 }
