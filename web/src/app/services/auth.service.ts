@@ -16,7 +16,7 @@
 
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { delay, map, Observable } from 'rxjs';
+import {delay, map, mergeMap, Observable} from 'rxjs';
 
 import { ErrorService } from './error.service';
 
@@ -26,24 +26,38 @@ import { ErrorService } from './error.service';
 export class AuthService {
 
   accessToken: string | null = null;
+  registryToken: string | null = null;
   isLoggedIn: boolean = false;
+  isRegistryLoggedIn: boolean = false;
   redirectUrl: string | null = null;
   isSecureMode: boolean = false;
 
   constructor(private http: HttpClient, private errorSvc: ErrorService) { }
 
-  login(): Observable<any>{
-    return this.tokenValidate()
+  login(url:string): Observable<any>{
+    return this.tokenValidate(url).pipe(
+      mergeMap(this.registryTokenValidate.bind(this))
+    )
   }
 
-  tokenValidate(): Observable<any> {
-    let url = "/core-metadata/api/v3/ping";
-    return this.http.get(url)
+  tokenValidate(url:string): Observable<any> {
+    console.info("testing : " + url)
+    return this.http.get(url);
+  }
+
+  registryTokenValidate(url:string): Observable<any> {
+    //let url = "/api/v3/registrycenter/ping";
+    return this.http.get(url);
   }
 
   setAccessToken(token: string | null) {
     this.accessToken = token;
     window.sessionStorage.setItem("EdgeX_Access_Token",this.accessToken as string);
+  }
+
+  setRegistryToken(token: string | null) {
+    this.registryToken = token;
+    window.sessionStorage.setItem("EdgeX_Registry_Token",this.registryToken as string);
   }
 
   getAccessToken(): string | null {
@@ -55,5 +69,15 @@ export class AuthService {
       this.accessToken = token
     }
     return this.accessToken
+  }
+  getRegistryAccessToken(): string | null {
+    if (this.registryToken) {
+      return this.registryToken
+    }
+    let token = window.sessionStorage.getItem("EdgeX_Registry_Token");
+    if (token) {
+      this.registryToken = token
+    }
+    return this.registryToken
   }
 }

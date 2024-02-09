@@ -26,7 +26,7 @@ Clients:
     core-metadata:
         Protocol: http
         Host: edgex-core-metadata
-        Port: 19881
+        Port: 59881
         SecurityOptions:
             Mode: ""
             OpenZitiController: "openziti:1280"

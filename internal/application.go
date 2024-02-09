@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/edgexfoundry/edgex-ui-go/internal/common"
@@ -61,8 +60,9 @@ type Application struct {
 func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 	lc := bc.LoggingClientFrom(dic.Get)
 	clientsMapping = make(map[string]Client, 10)
-	zitiTransports := make(map[string]http.RoundTripper, 10)
-
+	//zitiTransports := make(map[string]http.RoundTripper, 10)
+	var zitiRoundTripper http.RoundTripper
+	zitiRoundTripper = nil
 	for clientName, clientInfo := range config.Clients {
 		addr := fmt.Sprintf("%s://%s:%d", clientInfo.Protocol, clientInfo.Host, clientInfo.Port)
 		client := Client{
@@ -70,50 +70,29 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 			transport: nil,
 		}
 
+		secretProvider := bc.SecretProviderExtFrom(dic.Get)
 		switch clientInfo.SecurityOptions["Mode"] {
 		case "zerotrust":
-			fmt.Printf("client %s is using zero trust? noice\n", clientName)
-			ozToken := clientInfo.SecurityOptions["OpenZitiAuthToken"]
-
-			if ozToken == "" {
-				ozTokenFile := clientInfo.SecurityOptions["OpenZitiAuthTokenFile"]
-				if _, err := os.Stat(ozTokenFile); os.IsNotExist(err) {
-					panic("cannot use zero trust configuration. no credentials supplied")
-				} else {
-					ozTokenContents, err := os.ReadFile(ozTokenFile)
-					ozToken = strings.TrimSpace(string(ozTokenContents))
-					if err != nil {
-						lc.Errorf("Could not read OpenZitiAuthTokenFile at %s. %v", ozTokenFile, err)
-						panic(err)
-					}
-				}
-			}
-
-			if ozToken == "" {
+			lc.Infof("client %s is using zero trust? noice", clientName)
+			jwt, jwtErr := secretProvider.GetSelfJWT()
+			if jwtErr != nil {
 				panic("cannot use zero trust configuration. no credentials supplied")
 			}
 
-			if zitiRoundTripper, ok := zitiTransports[ozToken]; ok {
-				//reuse the existing context
-				if zitiRoundTripper == nil {
-					panic("how is the transport nil")
-				}
-				client.transport = zitiRoundTripper
-			} else {
+			if zitiRoundTripper == nil {
 				ozUrl := clientInfo.SecurityOptions["OpenZitiController"]
-				ctx := bc.AuthToOpenZiti(ozUrl, ozToken)
+				ctx := bc.AuthToOpenZiti(ozUrl, jwt)
 				zitiContexts := ziti.NewSdkCollection()
 				zitiContexts.Add(ctx)
 
 				zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
 				zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-					lc.Infof("ZITI DIALING: %s", addr)
 					dialer := zitiContexts.NewDialer()
 					return dialer.Dial(network, addr)
 				}
-				zitiTransports[ozToken] = zitiTransport
-				client.transport = zitiTransport
+				zitiRoundTripper = zitiTransport
 			}
+			client.transport = zitiRoundTripper
 
 		case "http":
 		default:
