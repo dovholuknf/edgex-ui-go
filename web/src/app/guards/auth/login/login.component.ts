@@ -17,7 +17,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import {catchError, mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, combineLatest, forkJoin, Observable, of, throwError} from 'rxjs';
+import {BehaviorSubject, combineLatest, forkJoin, map, Observable, of, throwError} from 'rxjs';
 import { tap, delay } from 'rxjs/operators';
 
 import { AuthService } from '../../../services/auth.service';
@@ -47,103 +47,42 @@ export class LoginComponent implements OnInit {
     this.loading = true;
     this.authSvc.setAccessToken(this.accessToken);
     this.authSvc.setRegistryToken(this.registryToken);
-    /*
 
-    const l1 = this.authSvc.login("/core-metadata/api/v3/ping")
-      .pipe(
-        catchError((error) => {
-          this.loading = false;
-          this.authSvc.isLoggedIn = false;
-          this.accessToken = null;
-          this.tokenIsValid = false;
-          return throwError(error)
-        })
-      ).subscribe(() => {
-      this.authSvc.isLoggedIn = true;
-      this.loading = false;
-      this.tokenIsValid = true;
-      this.router.navigate(['/dashboard'], { relativeTo: this.route })
-    });
-
-    const l2 = this.authSvc.login("/api/v3/registrycenter/ping")
-      .pipe(
-        catchError((error) => {
-          this.loading = false;
-          this.authSvc.isRegistryLoggedIn = false;
-          this.registryToken = null;
-          this.registryTokenIsValid = false;
-          return throwError(error)
-        })
-      ).subscribe(() => {
-      this.authSvc.isRegistryLoggedIn = true;
-      this.loading = false;
-      this.registryTokenIsValid = true;
-      this.router.navigate(['/dashboard'], { relativeTo: this.route })
-    });
-
-    forkJoin(l1,l2).subscribe((r) => {
-      console.log(r);
-    })
-
-     */
-    /*
-    const r1 = new BehaviorSubject(false);
-    const r2 = new BehaviorSubject(false);
-    const a1 = this.authSvc.tokenValidate("/core-metadata/api/v3/ping").pipe(
-      catchError((e)=>{
+    const o1 = this.authSvc.tokenValidate("/core-metadata/api/v3/ping").pipe(
+      map((value) => {
+        this.authSvc.isLoggedIn = true;
+        this.accessTokenIsValid = true;
+      }),
+      catchError((e)=> {
         this.authSvc.isLoggedIn = false;
         this.accessToken = null;
         this.accessTokenIsValid = false;
-        r1.next(true);
-        return throwError(e)
-        //return of({});
+        return of(null);
       })
-    ).subscribe(() => {
-      this.authSvc.isLoggedIn = true;
-      this.accessTokenIsValid = true;
-      r1.next(true);
-    });
-
-    const a2=this.authSvc.registryTokenValidate("/api/v3/registrycenter/ping").pipe(
-      catchError((e)=>{
+    );
+    const o2= this.authSvc.tokenValidate("/api/v3/registrycenter/ping").pipe(
+      map((value) => {
+        this.authSvc.isRegistryLoggedIn = true;
+        this.registryTokenIsValid = true;
+      }),
+      catchError((e)=> {
         this.authSvc.isRegistryLoggedIn = false;
         this.registryToken = null;
         this.registryTokenIsValid = false;
-        r2.next(true);
-        return throwError(e)
-        //return of({});
-      })).subscribe(() => {
-      this.authSvc.isRegistryLoggedIn = true;
-      this.registryTokenIsValid = true;
-      r2.next(true);
-    });
-
-    forkJoin(r1, r2).subscribe(() => {
-      this.loading = false;
-      }
+        return of(null);
+      })
     );
 
-    */
-
-    const o1 = this.authSvc.tokenValidate("/core-metadata/api/v3/ping");
-    const o2= this.authSvc.registryTokenValidate("/api/v3/registrycenter/ping");
-
-    combineLatest([o1, o2]).pipe(
+    forkJoin([o1, o2]).pipe(
       catchError(errors => {
-        console.error('At least one observable encountered an error:', errors);
-        // Handle the error if any observable encounters an error
+        this.router.navigate(['/login'], { relativeTo: this.route })
         return [];
       })
-    ).subscribe(([result1, result2]) => {
-        if (result1) {
-          this.authSvc.isLoggedIn = true;
-          this.accessTokenIsValid = true;
-        }
-        if (result2){
-          this.authSvc.isRegistryLoggedIn = true;
-          this.registryTokenIsValid = true;
-        }
+    ).subscribe((result1) => {
         this.loading = false;
+        if (this.authSvc.isLoggedIn && this.authSvc.isRegistryLoggedIn) {
+          this.router.navigate(['/dashboard'], {relativeTo: this.route})
+        }
       }
     );
   }

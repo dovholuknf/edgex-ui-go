@@ -89,7 +89,7 @@ func (rh *ResourceHandler) getAclTokenOfConsul(w http.ResponseWriter, r *http.Re
 		return "", err, http.StatusUnauthorized
 	}
 
-	req.Header.Set(Authorization, "Bearer "+r.Header.Get("ConsulAuth"))
+	req.Header.Set(Authorization, "Bearer "+r.Header.Get("X-Consul-Token"))
 
 	resp, err := client.Do(req)
 	if err != nil {

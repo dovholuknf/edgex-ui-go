@@ -30,7 +30,7 @@ export class AuthInterceptor implements HttpInterceptor {
     if (this.authSvc.isSecureMode) {
       let authToken =  `Bearer ${this.authSvc.getAccessToken()}`;
       let consulToken =  `${this.authSvc.getRegistryAccessToken()}`;
-      headers = request.headers.set('X-Requested-With', 'XMLHttpRequest').set('Authorization', authToken).set('ConsulAuth', consulToken);
+      headers = request.headers.set('X-Requested-With', 'XMLHttpRequest').set('Authorization', authToken).set('X-Consul-Token', consulToken);
     }
     const req = request.clone({
       headers: headers

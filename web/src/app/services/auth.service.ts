@@ -34,19 +34,8 @@ export class AuthService {
 
   constructor(private http: HttpClient, private errorSvc: ErrorService) { }
 
-  login(url:string): Observable<any>{
-    return this.tokenValidate(url).pipe(
-      mergeMap(this.registryTokenValidate.bind(this))
-    )
-  }
-
   tokenValidate(url:string): Observable<any> {
-    console.info("testing : " + url)
-    return this.http.get(url);
-  }
-
-  registryTokenValidate(url:string): Observable<any> {
-    //let url = "/api/v3/registrycenter/ping";
+    console.debug("testing : " + url)
     return this.http.get(url);
   }
 
