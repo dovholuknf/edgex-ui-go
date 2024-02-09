@@ -25,7 +25,7 @@
             <form class="">
                 <div class="form-group">
                     <label for="accessToken" class="col-form-label">
-                        <span class="mr-1" i18n>Token</span>
+                        <span class="mr-1" i18n>Gateway Token</span>
                     </label>
                     <div class="">
                         <input type="password" class="form-control" id="accessToken" name="accessToken"  [class.is-invalid]="!accessTokenIsValid" [(ngModel)]="accessToken" (ngModelChange)="onInput()">
@@ -35,7 +35,7 @@
                     </div>
 
                   <label for="registryToken" class="col-form-label">
-                    <span class="mr-1" i18n>Registry Token</span>
+                    <span class="mr-1" i18n>ACL Token</span>
                   </label>
                   <div class="">
                     <input type="password" class="form-control" id="registryToken" name="registryToken"  [class.is-invalid]="!registryTokenIsValid" [(ngModel)]="registryToken" (ngModelChange)="onInput()">
