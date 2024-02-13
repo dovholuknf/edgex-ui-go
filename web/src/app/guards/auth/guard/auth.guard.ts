@@ -46,10 +46,11 @@ export class AuthGuard  {
   }
 
   checkLogin(url: string): boolean | UrlTree {
+    console.info("checking login. token: " + this.authSvc.isLoggedIn + ", registry: " + this.authSvc.isRegistryLoggedIn);
     if (!this.authSvc.isSecureMode) {
       return true; 
     }
-    if (this.authSvc.isLoggedIn && this.authSvc.isRegistryLoggedIn) {
+    if (this.authSvc.isLoggedIn || this.authSvc.isRegistryLoggedIn) {
       return true;
     }
     return this.router.parseUrl('/login');

@@ -80,7 +80,7 @@ export class LoginComponent implements OnInit {
       })
     ).subscribe((result1) => {
         this.loading = false;
-        if (this.authSvc.isLoggedIn && this.authSvc.isRegistryLoggedIn) {
+        if (this.authSvc.isLoggedIn || this.authSvc.isRegistryLoggedIn) {
           this.router.navigate(['/dashboard'], {relativeTo: this.route})
         }
       }
