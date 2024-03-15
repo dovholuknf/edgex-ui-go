@@ -18,7 +18,8 @@ package internal
 
 import (
 	"context"
-	boostrapcontainer "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
+	container2 "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
+	"github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/utils"
 	"sync"
 
 	"github.com/edgexfoundry/edgex-ui-go/internal/container"
@@ -40,7 +41,8 @@ func NewBootstrap(router *mux.Router, serviceName string) *Bootstrap {
 }
 
 func (b *Bootstrap) BootstrapHandler(ctx context.Context, wg *sync.WaitGroup, _ startup.Timer, dic *di.Container) bool {
-	boostrapcontainer.AdaptLogrusBasedLogging(dic)
+	lc := container2.LoggingClientFrom(dic.Get)
+	utils.AdaptLogrusBasedLogging(lc)
 
 	config := container.ConfigurationFrom(dic.Get)
 	LoadRestRoutes(b.router, dic)

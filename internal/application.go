@@ -20,9 +20,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	config2 "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/config"
 	bc "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
+	"github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/zerotrust"
 	"github.com/edgexfoundry/go-mod-bootstrap/v3/di"
 	"github.com/openziti/sdk-golang/ziti"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -70,10 +73,15 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 			transport: nil,
 		}
 
-		switch clientInfo.SecurityOptions["Mode"] {
+		switch clientInfo.SecurityOptions[config2.SecurityModeKey] {
 		case "zerotrust":
 			fmt.Printf("client %s is using zero trust? noice\n", clientName)
-			ozToken := clientInfo.SecurityOptions["OpenZitiAuthToken"]
+
+			sp := bc.SecretProviderExtFrom(dic.Get)
+			ozToken, jwtErr := sp.GetSelfJWT()
+			if jwtErr != nil {
+				panic(jwtErr)
+			}
 
 			if ozToken == "" {
 				ozTokenFile := clientInfo.SecurityOptions["OpenZitiAuthTokenFile"]
@@ -101,13 +109,16 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 				client.transport = zitiRoundTripper
 			} else {
 				ozUrl := clientInfo.SecurityOptions["OpenZitiController"]
-				ctx := bc.AuthToOpenZiti(ozUrl, ozToken)
+				ctx, zErr := zerotrust.AuthToOpenZiti(ozUrl, ozToken)
+				if zErr != nil {
+					log.Fatalf("unable to bootstrap zero trust: %v", zErr)
+				}
 				zitiContexts := ziti.NewSdkCollection()
 				zitiContexts.Add(ctx)
 
 				zitiTransport := http.DefaultTransport.(*http.Transport).Clone() // copy default transport
 				zitiTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-					lc.Infof("ZITI DIALING: %s", addr)
+					lc.Debugf("ZITI DIALING: %s", addr)
 					dialer := zitiContexts.NewDialer()
 					return dialer.Dial(network, addr)
 				}
