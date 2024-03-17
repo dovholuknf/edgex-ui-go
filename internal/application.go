@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 
 	config2 "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/config"
@@ -63,6 +62,7 @@ type Application struct {
 
 func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 	lc := bc.LoggingClientFrom(dic.Get)
+
 	clientsMapping = make(map[string]Client, 10)
 	zitiTransports := make(map[string]http.RoundTripper, 10)
 
@@ -77,26 +77,16 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 		switch listenMode {
 		case zerotrust.ConfigKey:
 			lc.Infof("zero trust client for: %s", clientName)
-			ozToken := clientInfo.SecurityOptions["OpenZitiAuthToken"]
-
-			if ozToken == "" {
-				ozTokenFile := clientInfo.SecurityOptions["OpenZitiAuthTokenFile"]
-				if _, err := os.Stat(ozTokenFile); os.IsNotExist(err) {
-					panic("cannot use zero trust configuration. no credentials supplied")
-				} else {
-					ozTokenContents, err := os.ReadFile(ozTokenFile)
-					ozToken = strings.TrimSpace(string(ozTokenContents))
-					if err != nil {
-						lc.Errorf("Could not read OpenZitiAuthTokenFile at %s. %v", ozTokenFile, err)
-						panic(err)
-					}
-				}
+			secretProvider := bc.SecretProviderExtFrom(dic.Get)
+			if secretProvider == nil {
+				panic("zero trust mode activated yet no secret provider?")
 			}
 
-			if ozToken == "" {
-				panic("cannot use zero trust configuration. no credentials supplied")
+			ozToken, jwtErr := secretProvider.GetSelfJWT()
+			if jwtErr != nil {
+				panic(fmt.Errorf("could not load jwt: %v", jwtErr))
 			}
-
+			fmt.Printf("%s", ozToken)
 			if zitiRoundTripper, ok := zitiTransports[ozToken]; ok {
 				//reuse the existing context
 				if zitiRoundTripper == nil {
