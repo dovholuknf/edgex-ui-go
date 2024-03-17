@@ -20,15 +20,18 @@ package internal
 import (
 	"context"
 	"fmt"
-	bc "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
-	"github.com/edgexfoundry/go-mod-bootstrap/v3/di"
-	"github.com/openziti/sdk-golang/ziti"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
+
+	config2 "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/config"
+	bc "github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/container"
+	"github.com/edgexfoundry/go-mod-bootstrap/v3/bootstrap/zerotrust"
+	"github.com/edgexfoundry/go-mod-bootstrap/v3/di"
+	"github.com/openziti/sdk-golang/ziti"
 
 	"github.com/edgexfoundry/edgex-ui-go/internal/common"
 	"github.com/edgexfoundry/edgex-ui-go/internal/config"
@@ -70,9 +73,10 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 			transport: nil,
 		}
 
-		switch clientInfo.SecurityOptions["Mode"] {
-		case "zerotrust":
-			fmt.Printf("client %s is using zero trust? noice\n", clientName)
+		listenMode := strings.ToLower(clientInfo.SecurityOptions[config2.SecurityModeKey])
+		switch listenMode {
+		case zerotrust.ConfigKey:
+			lc.Infof("zero trust client for: %s", clientName)
 			ozToken := clientInfo.SecurityOptions["OpenZitiAuthToken"]
 
 			if ozToken == "" {
@@ -96,12 +100,15 @@ func initClientsMapping(config *config.ConfigurationStruct, dic *di.Container) {
 			if zitiRoundTripper, ok := zitiTransports[ozToken]; ok {
 				//reuse the existing context
 				if zitiRoundTripper == nil {
-					panic("how is the transport nil")
+					panic("unexpected. transport should not be nil")
 				}
 				client.transport = zitiRoundTripper
 			} else {
 				ozUrl := clientInfo.SecurityOptions["OpenZitiController"]
-				ctx := bc.AuthToOpenZiti(ozUrl, ozToken)
+				ctx, authErr := zerotrust.AuthToOpenZiti(ozUrl, ozToken)
+				if authErr != nil {
+					panic(fmt.Errorf("could not authenticate to OpenZiti: %v", authErr))
+				}
 				zitiContexts := ziti.NewSdkCollection()
 				zitiContexts.Add(ctx)
 
